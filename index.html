@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NixieGPT v2.2</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; }
+        #app-loader { position: fixed; inset: 0; background: white; z-index: 10000; display: flex; align-items: center; justify-content: center; }
+        .message-fade { animation: fadeInUp 0.3s ease-out; }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col m-0 p-0">
+
+    <div id="app-loader">
+        <div class="text-center">
+            <div class="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto"></div>
+            <p class="mt-4 font-bold text-gray-600">Starting NixieGPT...</p>
+        </div>
+    </div>
+
+    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 p-4 flex justify-between items-center border-b-2 border-gray-100">
+        <div class="flex items-center gap-2">
+            <div class="bg-blue-600 text-white p-2 rounded-lg font-black text-xl shadow-lg">N</div>
+            <h1 class="text-2xl font-black text-gray-800 tracking-tight">NixieGPT</h1>
+        </div>
+        <button id="open-settings" class="bg-gray-100 hover:bg-gray-200 p-2 px-4 rounded-xl font-bold transition">⚙️ Settings</button>
+    </header>
+
+    <main id="chat-feed" class="flex-1 overflow-y-auto p-4 space-y-6 max-w-3xl mx-auto w-full pb-36">
+        <div id="status-box" class="bg-blue-50 border-2 border-blue-100 p-6 rounded-3xl mt-10 text-center">
+            <h3 class="text-blue-800 font-bold text-lg">System Active</h3>
+            <p id="status-text" class="text-blue-600">Please enter your API Key in Settings to begin.</p>
+        </div>
+    </main>
+
+    <div class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100">
+        <form id="chat-form" class="max-w-3xl mx-auto flex gap-2">
+            <input type="text" id="user-input" autocomplete="off" placeholder="Type your message..." class="flex-1 p-4 rounded-2xl bg-gray-100 border-none focus:ring-2 focus:ring-blue-500">
+            <button type="submit" id="send-btn" class="bg-blue-600 text-white px-8 rounded-2xl font-bold shadow-lg disabled:opacity-50">SEND</button>
+        </form>
+    </div>
+
+    <div id="modal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[999] p-4">
+        <div class="bg-white p-8 rounded-3xl w-full max-w-sm shadow-2xl">
+            <h2 class="text-xl font-black mb-4 text-center">Setup</h2>
+            <input type="password" id="api-key-input" class="w-full p-4 bg-gray-50 border rounded-2xl mb-4 outline-none focus:ring-2 focus:ring-blue-500" placeholder="Paste sk-or-v1- key here">
+            <div class="flex gap-2">
+                <button id="close-modal" class="flex-1 py-3 font-bold text-gray-400">Close</button>
+                <button id="save-settings" class="flex-1 py-3 bg-blue-600 text-white rounded-2xl font-bold">Save Key</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // GLOBAL STATE
+        let API_KEY = localStorage.getItem('nixie_key') || '';
+        const feed = document.getElementById('chat-feed');
+        const form = document.getElementById('chat-form');
+        const input = document.getElementById('user-input');
+        const btn = document.getElementById('send-btn');
+        const modal = document.getElementById('modal');
+
+        // CHECK SETUP ON LOAD
+        if(API_KEY) {
+            document.getElementById('api-key-input').value = API_KEY;
+            document.getElementById('status-text').innerHTML = "✅ API Key Loaded. Ready to Chat!";
+        }
+
+        function createBubble(role, content) {
+            const div = document.createElement('div');
+            div.className = `message-fade p-4 rounded-2xl max-w-[85%] ${role === 'user' ? 'bg-blue-600 text-white ml-auto shadow-md' : 'bg-white border border-gray-200 text-gray-800 mr-auto shadow-sm'}`;
+            div.innerHTML = role === 'user' ? content : marked.parse(content);
+            feed.appendChild(div);
+            feed.scrollTop = feed.scrollHeight;
+            return div;
+        }
+
+        // THE FIXED BRAIN
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            const text = input.value.trim();
+            
+            if (!text) return;
+            if (!API_KEY) {
+                alert("Settings -> Paste API Key first!");
+                modal.classList.replace('hidden', 'flex');
+                return;
+            }
+
+            document.getElementById('status-box')?.remove();
+            createBubble('user', text);
+            input.value = ''; 
+            btn.disabled = true;
+
+            const aiDiv = createBubble('ai', 'Thinking...');
+
+            try {
+                const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        // RE-FIXED AUTHENTICATION HEADERS
+                        "Authorization": "Bearer " + API_KEY.trim(),
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": window.location.origin || "http://localhost",
+                        "X-Title": "NixieGPT"
+                    },
+                    body: JSON.stringify({
+                        model: "google/gemini-2.0-flash-lite-preview-02-05:free",
+                        messages: [{ role: "user", content: text }]
+                    })
+                });
+
+                const data = await res.json();
+                
+                if (data.error) {
+                    // This tells you EXACTLY what is wrong
+                    aiDiv.innerHTML = `<div class="text-red-500 font-bold">Error: ${data.error.message}</div><div class="text-xs text-gray-400 mt-1">Code: ${data.error.code || 'unknown'}</div>`;
+                } else if (data.choices && data.choices[0]) {
+                    const reply = data.choices[0].message.content;
+                    aiDiv.innerHTML = marked.parse(reply);
+                } else {
+                    aiDiv.innerText = "Empty response from server.";
+                }
+            } catch (err) {
+                aiDiv.innerText = "Check your internet connection.";
+                console.error(err);
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        // UI ACTIONS
+        document.getElementById('open-settings').onclick = () => modal.classList.replace('hidden', 'flex');
+        document.getElementById('close-modal').onclick = () => modal.classList.replace('flex', 'hidden');
+        document.getElementById('save-settings').onclick = () => {
+            const val = document.getElementById('api-key-input').value.trim();
+            if(val) {
+                localStorage.setItem('nixie_key', val);
+                API_KEY = val;
+                alert("Saved! Refreshing...");
+                location.reload(); 
+            }
+        };
+
+        // LOADER CONTROL
+        window.onload = () => {
+            setTimeout(() => {
+                const loader = document.getElementById('app-loader');
+                loader.style.opacity = '0';
+                setTimeout(() => loader.remove(), 500);
+            }, 800);
+        };
+    </script>
+</body>
+  </html>
+
