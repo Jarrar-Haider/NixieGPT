@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NixieGPT v2.5 - MANUAL FIX</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body class="bg-gray-100 min-h-screen p-4">
+
+    <div class="max-w-2xl mx-auto bg-white rounded-3xl shadow-xl overflow-hidden flex flex-col h-[90vh]">
+        <div class="p-4 bg-blue-600 text-white flex justify-between items-center">
+            <h1 class="font-black text-xl">NixieGPT</h1>
+            <span id="indicator" class="text-xs bg-red-500 px-2 py-1 rounded">OFFLINE</span>
+        </div>
+
+        <div class="p-4 border-b bg-yellow-50">
+            <label class="text-[10px] font-bold text-yellow-700 uppercase">Step 1: Paste API Key Below</label>
+            <div class="flex gap-2">
+                <input type="text" id="manual-key" placeholder="sk-or-v1-..." class="flex-1 p-2 border rounded text-xs">
+                <button onclick="saveKey()" class="bg-yellow-600 text-white px-4 py-1 rounded text-xs font-bold">ACTIVATE</button>
+            </div>
+        </div>
+
+        <div id="chat" class="flex-1 overflow-y-auto p-4 space-y-4 bg-gray-50">
+            <div class="text-gray-400 text-center mt-10 text-sm italic">Enter your key above to start.</div>
+        </div>
+
+        <form id="f" class="p-4 border-t flex gap-2 bg-white">
+            <input type="text" id="i" placeholder="Ask Nixie..." class="flex-1 p-3 bg-gray-100 rounded-xl outline-none">
+            <button type="submit" id="b" class="bg-blue-600 text-white px-6 rounded-xl font-bold disabled:opacity-50">SEND</button>
+        </form>
+    </div>
+
+    <script>
+        // Store key in a simple global variable
+        let CURRENT_KEY = localStorage.getItem('nixie_key') || '';
+        document.getElementById('manual-key').value = CURRENT_KEY;
+        updateIndicator();
+
+        function updateIndicator() {
+            const ind = document.getElementById('indicator');
+            if(CURRENT_KEY.startsWith('sk-or-v1')) {
+                ind.innerText = "READY";
+                ind.className = "text-xs bg-green-500 px-2 py-1 rounded";
+            } else {
+                ind.innerText = "KEY INVALID";
+                ind.className = "text-xs bg-red-500 px-2 py-1 rounded";
+            }
+        }
+
+        function saveKey() {
+            const val = document.getElementById('manual-key').value.trim();
+            CURRENT_KEY = val;
+            localStorage.setItem('nixie_key', val);
+            updateIndicator();
+            alert("Key updated! Try chatting now.");
+        }
+
+        document.getElementById('f').onsubmit = async (e) => {
+            e.preventDefault();
+            const text = document.getElementById('i').value.trim();
+            if(!text || !CURRENT_KEY) return alert("Please activate your key first!");
+
+            // Add user message
+            const u = document.createElement('div');
+            u.className = "bg-blue-600 text-white p-3 rounded-2xl ml-auto max-w-[80%]";
+            u.innerText = text;
+            document.getElementById('chat').appendChild(u);
+            document.getElementById('i').value = '';
+            
+            const ai = document.createElement('div');
+            ai.className = "bg-white border p-3 rounded-2xl mr-auto max-w-[80%] shadow-sm";
+            ai.innerText = "Thinking...";
+            document.getElementById('chat').appendChild(ai);
+
+            try {
+                // THE "FORCE" AUTHENTICATION
+                const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${CURRENT_KEY.replace(/\s/g, '')}`
+                    },
+                    body: JSON.stringify({
+                        model: "google/gemini-2.0-flash-lite-preview-02-05:free",
+                        messages: [{role: "user", content: text}]
+                    })
+                });
+
+                const data = await response.json();
+                
+                if(data.error) {
+                    ai.innerHTML = `<b class="text-red-600">ERROR ${data.error.code}:</b><br>${data.error.message}`;
+                } else {
+                    ai.innerHTML = marked.parse(data.choices[0].message.content);
+                }
+            } catch (err) {
+                ai.innerText = "Critical Connection Error.";
+            }
+            
+            document.getElementById('chat').scrollTop = document.getElementById('chat').scrollHeight;
+        };
+    </script>
+</body>
+  </html>
+
