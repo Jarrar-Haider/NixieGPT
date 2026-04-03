@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>NixieGPT</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #ffffff;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Responsive height for mobile browsers */
+        .h-screen-dvh {
+            height: 100vh; /* Fallback */
+            height: 100dvh;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #e5e7eb;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #d1d5db;
+        }
+
+        /* Markdown Styles */
+        .prose pre {
+            background-color: #1f2937;
+            color: #e5e7eb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin-top: 0.5rem;
+            margin-bottom: 0.5rem;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+        .prose code {
+            background-color: #f3f4f6;
+            color: #ef4444;
+            padding: 0.125rem 0.25rem;
+            border-radius: 0.25rem;
+            font-family: monospace;
+            font-size: 0.875rem;
+        }
+        .prose pre code {
+            background-color: transparent;
+            color: inherit;
+            padding: 0;
+            border-radius: 0;
+        }
+        .prose p { margin-bottom: 0.5rem; }
+        .prose p:last-child { margin-bottom: 0; }
+        .prose strong { font-weight: 600; }
+
+        /* Typing Indicator Animation */
+        .typing-dot {
+            animation: typing 1.4s infinite ease-in-out both;
+        }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; }
+        .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        
+        @keyframes typing {
+            0%, 80%, 100% { transform: scale(0); }
+            40% { transform: scale(1); }
+        }
+
+        /* Transitions */
+        .slide-in {
+            animation: slideIn 0.3s ease-out forwards;
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+</head>
+<body class="overflow-hidden bg-white text-gray-800">
+
+    <div id="loading" class="fixed inset-0 flex flex-col items-center justify-center bg-white z-50 transition-opacity duration-300">
+        <div class="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-4"></div>
+        <div class="text-lg font-medium text-gray-600">Loading NixieGPT...</div>
+    </div>
+
+    <div id="app" class="hidden h-screen-dvh w-full flex overflow-hidden">
+        
+        <div id="sidebar-overlay" class="fixed inset-0 bg-black/50 z-20 hidden md:hidden transition-opacity"></div>
+
+        <aside id="sidebar" class="fixed md:static inset-y-0 left-0 z-30 w-72 bg-gray-50 border-r border-gray-200 flex flex-col transform -translate-x-full md:translate-x-0 transition-transform duration-300 ease-in-out">
+            <div class="p-4 flex justify-between items-center border-b border-gray-200">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold">N</div>
+                    <h1 class="font-semibold text-xl tracking-tight">NixieGPT</h1>
+                </div>
+                <button id="close-sidebar-btn" class="md:hidden p-2 text-gray-500 hover:text-gray-700">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </div>
+            
+            <div class="p-3">
+                <button id="new-chat-btn" class="w-full flex items-center gap-3 px-4 py-3 bg-white border border-gray-200 rounded-xl hover:bg-gray-50 hover:shadow-sm transition-all text-sm font-medium text-gray-700">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    New Chat
+                </button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-3">
+                <div class="text-xs font-semibold text-gray-400 mb-2 px-2 uppercase tracking-wider">Recent</div>
+                <ul id="chat-list" class="space-y-1">
+                    </ul>
+            </div>
+        </aside>
+
+        <main class="flex-1 flex flex-col h-full relative w-full bg-white">
+            <header class="flex items-center justify-between p-3 border-b border-gray-100 bg-white/80 backdrop-blur-md z-10">
+                <button id="open-sidebar-btn" class="md:hidden p-2 text-gray-600 hover:bg-gray-100 rounded-lg">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+                </button>
+                <div class="font-semibold text-lg md:hidden">NixieGPT</div>
+                <div class="w-10 md:hidden"></div> <div class="hidden md:flex flex-1 justify-center">
+                    <span class="px-3 py-1 bg-gray-100 text-gray-600 text-xs rounded-full font-medium tracking-wide">Model: Default (Nixie-1)</span>
+                </div>
+            </header>
+
+            <div id="chat-container" class="flex-1 overflow-y-auto p-4 sm:p-6 pb-32 w-full max-w-4xl mx-auto scroll-smooth">
+                <div id="empty-state" class="h-full flex flex-col items-center justify-center text-center px-4 slide-in">
+                    <div class="w-16 h-16 bg-blue-100 text-blue-600 rounded-2xl flex items-center justify-center mb-4 shadow-sm">
+                        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                    </div>
+                    <h2 class="text-2xl font-semibold mb-2 text-gray-800">How can I help you today?</h2>
+                    <p class="text-gray-500 max-w-md">I'm NixieGPT, a universal AI assistant. Ask me anything, or give me a task to complete.</p>
+                </div>
+                
+                <div id="messages-list" class="space-y-6 hidden">
+                    </div>
+                
+                <div id="typing-indicator" class="hidden flex gap-4 w-full mt-6 slide-in">
+                    <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 mt-1">
+                        <span class="text-sm font-bold">N</span>
+                    </div>
+                    <div class="flex-1 flex items-center">
+                        <div class="bg-gray-50 rounded-2xl rounded-tl-none px-5 py-4 inline-flex gap-1 items-center">
+                            <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                            <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                            <div class="w-2 h-2 bg-gray-400 rounded-full typing-dot"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-6 pb-4 px-4 sm:px-6">
+                <div class="max-w-4xl mx-auto relative">
+                    <div class="bg-gray-50 border border-gray-200 rounded-3xl p-2 flex items-end gap-2 shadow-[0_0_15px_rgba(0,0,0,0.05)] focus-within:ring-2 focus-within:ring-blue-100 focus-within:border-blue-300 transition-all">
+                        <textarea id="message-input" rows="1" class="flex-1 bg-transparent border-none focus:ring-0 resize-none max-h-32 min-h-[44px] py-3 px-4 outline-none text-gray-800 placeholder-gray-400" placeholder="Message NixieGPT..."></textarea>
+                        <button id="send-btn" disabled class="mb-1 mr-1 w-10 h-10 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-full flex items-center justify-center shrink-0 transition-colors">
+                            <svg class="w-5 h-5 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path></svg>
+                        </button>
+                    </div>
+                    <div class="text-center mt-2 text-[10px] text-gray-400">
+                        NixieGPT can make mistakes. Consider verifying important information.
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const NixieApp = {
+                state: {
+                    chats: [],
+                    activeChatId: null,
+                    isTyping: false
+                },
+                
+                dom: {
+                    loading: document.getElementById('loading'),
+                    app: document.getElementById('app'),
+                    sidebar: document.getElementById('sidebar'),
+                    sidebarOverlay: document.getElementById('sidebar-overlay'),
+                    openSidebarBtn: document.getElementById('open-sidebar-btn'),
+                    closeSidebarBtn: document.getElementById('close-sidebar-btn'),
+                    newChatBtn: document.getElementById('new-chat-btn'),
+                    chatList: document.getElementById('chat-list'),
+                    chatContainer: document.getElementById('chat-container'),
+                    emptyState: document.getElementById('empty-state'),
+                    messagesList: document.getElementById('messages-list'),
+                    messageInput: document.getElementById('message-input'),
+                    sendBtn: document.getElementById('send-btn'),
+                    typingIndicator: document.getElementById('typing-indicator')
+                },
+
+                init() {
+                    // Initialize with a new chat
+                    this.createNewChat();
+                    this.bindEvents();
+                    
+                    // Hide loader safely
+                    setTimeout(() => {
+                        this.dom.loading.style.opacity = '0';
+                        setTimeout(() => {
+                            this.dom.loading.classList.add('hidden');
+                            this.dom.app.classList.remove('hidden');
+                        }, 300);
+                    }, 500);
+                },
+
+                bindEvents() {
+                    // Sidebar Mobile Toggles
+                    this.dom.openSidebarBtn.addEventListener('click', () => this.toggleSidebar(true));
+                    this.dom.closeSidebarBtn.addEventListener('click', () => this.toggleSidebar(false));
+                    this.dom.sidebarOverlay.addEventListener('click', () => this.toggleSidebar(false));
+
+                    // Chat Actions
+                    this.dom.newChatBtn.addEventListener('click', () => {
+                        this.createNewChat();
+                        this.toggleSidebar(false);
+                    });
+
+                    // Input Autosize & Validation
+                    this.dom.messageInput.addEventListener('input', (e) => {
+                        this.autoResizeInput();
+                        this.dom.sendBtn.disabled = e.target.value.trim() === '';
+                    });
+
+                    // Send Message (Enter key or Click)
+                    this.dom.messageInput.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            this.handleSend();
+                        }
+                    });
+                    this.dom.sendBtn.addEventListener('click', () => this.handleSend());
+                },
+
+                toggleSidebar(show) {
+                    if (show) {
+                        this.dom.sidebar.classList.remove('-translate-x-full');
+                        this.dom.sidebarOverlay.classList.remove('hidden');
+                    } else {
+                        this.dom.sidebar.classList.add('-translate-x-full');
+                        this.dom.sidebarOverlay.classList.add('hidden');
+                    }
+                },
+
+                autoResizeInput() {
+                    const el = this.dom.messageInput;
+                    el.style.height = 'auto';
+                    el.style.height = (el.scrollHeight) + 'px';
+                    if (el.value === '') el.style.height = '44px'; // Reset to min height
+                },
+
+                createNewChat() {
+                    const newChat = {
+                        id: Date.now().toString(),
+                        title: 'New conversation',
+                        messages: []
+                    };
+                    this.state.chats.unshift(newChat);
+                    this.switchChat(newChat.id);
+                },
+
+                switchChat(id) {
+                    this.state.activeChatId = id;
+                    this.renderSidebar();
+                    this.renderChatArea();
+                },
+
+                getActiveChat() {
+                    return this.state.chats.find(c => c.id === this.state.activeChatId);
+                },
+
+                renderSidebar() {
+                    this.dom.chatList.innerHTML = '';
+                    this.state.chats.forEach(chat => {
+                        const isActive = chat.id === this.state.activeChatId;
+                        const li = document.createElement('li');
+                        li.className = `cursor-pointer rounded-lg px-3 py-2 text-sm truncate transition-colors flex items-center gap-2
+                            ${isActive ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-600 hover:bg-gray-100'}`;
+                        li.innerHTML = `
+                            <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"></path></svg>
+                            ${chat.title}
+                        `;
+                        li.onclick = () => {
+                            this.switchChat(chat.id);
+                            this.toggleSidebar(false);
+                        };
+                        this.dom.chatList.appendChild(li);
+                    });
+                },
+
+                renderChatArea() {
+                    const chat = this.getActiveChat();
+                    this.dom.messagesList.innerHTML = '';
+                    
+                    if (chat.messages.length === 0) {
+                        this.dom.emptyState.classList.remove('hidden');
+                        this.dom.messagesList.classList.add('hidden');
+                    } else {
+                        this.dom.emptyState.classList.add('hidden');
+                        this.dom.messagesList.classList.remove('hidden');
+                        chat.messages.forEach(msg => this.appendMessageDOM(msg));
+                        this.scrollToBottom();
+                    }
+                },
+
+                parseMarkdown(text) {
+                    // Escape basic HTML
+                    let html = text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    
+                    // Code blocks: ```code```
+                    html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+                    
+                    // Inline code: `code`
+                    html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+                    
+                    // Bold: **text**
+                    html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+                    
+                    // Line breaks
+                    html = html.replace(/\n/g, '<br>');
+                    
+                    // Wrap free text in paragraphs (simplified)
+                    return `<div class="prose prose-sm max-w-none">${html}</div>`;
+                },
+
+                appendMessageDOM(message) {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = `flex w-full slide-in ${message.role === 'user' ? 'justify-end' : 'justify-start gap-4'}`;
+                    
+                    let innerHTML = '';
+                    
+                    if (message.role === 'ai') {
+                        innerHTML += `
+                            <div class="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white shrink-0 mt-1 shadow-sm">
+                                <span class="text-sm font-bold">N</span>
+                            </div>
+                            <div class="max-w-[85%] sm:max-w-[75%]">
+                                <div class="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap">${this.parseMarkdown(message.content)}</div>
+                            </div>
+                        `;
+                    } else {
+                        innerHTML += `
+                            <div class="max-w-[85%] sm:max-w-[75%] bg-gray-100 rounded-3xl rounded-tr-sm px-5 py-3 text-gray-800 text-sm leading-relaxed shadow-sm">
+                                ${message.content.replace(/</g, '&lt;').replace(/>/g, '&gt;')}
+                            </div>
+                        `;
+                    }
+                    
+                    wrapper.innerHTML = innerHTML;
+                    this.dom.messagesList.appendChild(wrapper);
+                },
+
+                scrollToBottom() {
+                    setTimeout(() => {
+                        this.dom.chatContainer.scrollTop = this.dom.chatContainer.scrollHeight;
+                    }, 50);
+                },
+
+                async handleSend() {
+                    const text = this.dom.messageInput.value.trim();
+                    if (!text || this.state.isTyping) return;
+
+                    const chat = this.getActiveChat();
+                    
+                    // Update Title if it's the first message
+                    if (chat.messages.length === 0) {
+                        chat.title = text.length > 20 ? text.substring(0, 20) + '...' : text;
+                        this.renderSidebar();
+                        this.dom.emptyState.classList.add('hidden');
+                        this.dom.messagesList.classList.remove('hidden');
+                    }
+
+                    // Reset Input
+                    this.dom.messageInput.value = '';
+                    this.autoResizeInput();
+                    this.dom.sendBtn.disabled = true;
+
+                    // Add User Message
+                    const userMsg = { role: 'user', content: text };
+                    chat.messages.push(userMsg);
+                    this.appendMessageDOM(userMsg);
+                    this.scrollToBottom();
+
+                    // Show Typing Indicator
+                    this.state.isTyping = true;
+                    this.dom.typingIndicator.classList.remove('hidden');
+                    this.scrollToBottom();
+
+          
