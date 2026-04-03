@@ -1,112 +1,188 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>NixieGPT</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<style>
-body { margin:0; font-family: sans-serif; }
-#loading {
-  position:fixed; inset:0;
-  display:flex; align-items:center; justify-content:center;
-  background:#fff; z-index:50;
-}
-#app { display:none; height:100vh; }
-</style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NixieGPT</title>
+
+  <!-- Tailwind -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Marked -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 </head>
-<body>
 
-<div id="loading">Loading NixieGPT...</div>
+<body class="bg-gray-100 text-gray-900 flex flex-col min-h-screen">
 
-<div id="app" class="flex">
-
-<!-- Sidebar -->
-<div class="w-64 bg-gray-100 border-r flex flex-col">
-<button id="newChat" class="m-2 p-2 bg-black text-white rounded">New Chat</button>
-<div id="chats" class="flex-1 overflow-y-auto"></div>
+<div id="loading" class="fixed inset-0 flex items-center justify-center bg-white z-50">
+  Loading App...
 </div>
 
-<!-- Main -->
-<div class="flex flex-col flex-1">
+<div id="app" class="hidden flex flex-1 overflow-hidden">
 
-<div id="messages" class="flex-1 p-4 overflow-y-auto flex flex-col"></div>
+  <!-- Sidebar -->
+  <div id="sidebar" class="w-64 bg-white border-r flex flex-col">
+    <div class="p-4 font-bold text-xl">NixieGPT</div>
 
-<div class="p-3 border-t flex">
-<input id="input" class="flex-1 border p-2 rounded" placeholder="Message NixieGPT..." />
-<button id="send" class="ml-2 bg-blue-600 text-white px-4 rounded">Send</button>
+    <button id="newChat" class="m-2 p-2 bg-gray-200 rounded">+ New Chat</button>
+
+    <div id="chatList" class="flex-1 overflow-y-auto"></div>
+
+    <button id="settingsBtn" class="m-2 p-2 bg-gray-200 rounded">Settings</button>
+  </div>
+
+  <!-- Main -->
+  <div class="flex flex-col flex-1">
+
+    <!-- Messages -->
+    <div id="messages" class="flex-1 overflow-y-auto p-4 space-y-4"></div>
+
+    <!-- Input -->
+    <div class="p-3 border-t bg-white flex">
+      <input id="input" class="flex-1 border rounded p-2" placeholder="Message..."/>
+      <button id="send" class="ml-2 px-4 bg-blue-500 text-white rounded">Send</button>
+    </div>
+  </div>
 </div>
 
-</div>
+<!-- Settings Modal -->
+<div id="settingsModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+  <div class="bg-white p-4 rounded w-80">
+    <h2 class="font-bold text-lg mb-2">Settings</h2>
 
+    <input id="apiKey" type="password" placeholder="API Key" class="w-full border p-2 mb-2"/>
+    <input id="model" placeholder="Model" class="w-full border p-2 mb-2"/>
+
+    <textarea id="systemPrompt" placeholder="System Prompt" class="w-full border p-2 mb-2"></textarea>
+
+    <button id="saveSettings" class="bg-blue-500 text-white px-4 py-2 rounded w-full">Save</button>
+  </div>
 </div>
 
 <script>
-let chats = [];
-let activeChat = null;
+window.addEventListener("DOMContentLoaded", () => {
 
-function init(){
-  document.getElementById('loading').style.display='none';
-  document.getElementById('app').style.display='flex';
-  createChat();
-}
+  const loading = document.getElementById("loading");
+  const app = document.getElementById("app");
 
-function createChat(){
-  const chat = {id:Date.now(), messages:[]};
-  chats.push(chat);
-  activeChat = chat;
+  loading.style.display = "none";
+  app.classList.remove("hidden");
+
+  let chats = JSON.parse(localStorage.getItem("chats") || "[]");
+  let currentChat = null;
+
+  const messagesEl = document.getElementById("messages");
+
+  function save() {
+    localStorage.setItem("chats", JSON.stringify(chats));
+  }
+
+  function renderChats() {
+    const list = document.getElementById("chatList");
+    list.innerHTML = "";
+
+    chats.forEach((chat, i) => {
+      const div = document.createElement("div");
+      div.className = "p-2 cursor-pointer hover:bg-gray-200";
+      div.innerText = chat.name || "Chat " + (i + 1);
+      div.onclick = () => loadChat(i);
+      list.appendChild(div);
+    });
+  }
+
+  function loadChat(index) {
+    currentChat = index;
+    messagesEl.innerHTML = "";
+
+    chats[index].messages.forEach(m => addMessage(m.role, m.content));
+  }
+
+  function addMessage(role, content) {
+    const div = document.createElement("div");
+    div.className = role === "user" ? "text-right" : "text-left";
+
+    const bubble = document.createElement("div");
+    bubble.className = "inline-block p-2 rounded bg-gray-200";
+    bubble.innerHTML = marked.parse(content);
+
+    div.appendChild(bubble);
+    messagesEl.appendChild(div);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+  }
+
+  async function sendMessage() {
+    const input = document.getElementById("input");
+    const text = input.value.trim();
+    if (!text) return;
+
+    input.value = "";
+
+    if (currentChat === null) {
+      chats.push({ name: "New Chat", messages: [] });
+      currentChat = chats.length - 1;
+    }
+
+    chats[currentChat].messages.push({ role: "user", content: text });
+    addMessage("user", text);
+
+    const apiKey = localStorage.getItem("apiKey");
+    const model = localStorage.getItem("model") || "deepseek/deepseek-r1:free";
+
+    let aiMsg = "";
+
+    try {
+      const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + apiKey
+        },
+        body: JSON.stringify({
+          model: model,
+          messages: chats[currentChat].messages
+        })
+      });
+
+      const data = await res.json();
+      aiMsg = data.choices[0].message.content;
+
+    } catch (e) {
+      aiMsg = "Error connecting to AI";
+    }
+
+    chats[currentChat].messages.push({ role: "assistant", content: aiMsg });
+    addMessage("assistant", aiMsg);
+
+    save();
+    renderChats();
+  }
+
+  document.getElementById("send").onclick = sendMessage;
+
+  document.getElementById("newChat").onclick = () => {
+    chats.push({ name: "New Chat", messages: [] });
+    save();
+    renderChats();
+  };
+
+  document.getElementById("settingsBtn").onclick = () => {
+    document.getElementById("settingsModal").classList.remove("hidden");
+
+    document.getElementById("apiKey").value = localStorage.getItem("apiKey") || "";
+    document.getElementById("model").value = localStorage.getItem("model") || "";
+  };
+
+  document.getElementById("saveSettings").onclick = () => {
+    localStorage.setItem("apiKey", document.getElementById("apiKey").value);
+    localStorage.setItem("model", document.getElementById("model").value);
+    localStorage.setItem("systemPrompt", document.getElementById("systemPrompt").value);
+
+    document.getElementById("settingsModal").classList.add("hidden");
+  };
+
   renderChats();
-  renderMessages();
-}
 
-function renderChats(){
-  const container = document.getElementById('chats');
-  container.innerHTML='';
-  chats.forEach(c=>{
-    const div=document.createElement('div');
-    div.className='p-2 cursor-pointer hover:bg-gray-200';
-    div.innerText='Chat '+c.id;
-    div.onclick=()=>{activeChat=c; renderMessages();};
-    container.appendChild(div);
-  });
-}
-
-function renderMessages(){
-  const box=document.getElementById('messages');
-  box.innerHTML='';
-  activeChat.messages.forEach(m=>{
-    const div=document.createElement('div');
-    div.className='max-w-[70%] p-2 m-1 rounded ' + 
-      (m.role==='user' ? 'bg-blue-500 text-white self-end' : 'bg-gray-200 self-start');
-    div.innerText=m.text;
-    box.appendChild(div);
-  });
-  box.scrollTop = box.scrollHeight;
-}
-
-function send(){
-  const input=document.getElementById('input');
-  const text=input.value.trim();
-  if(!text) return;
-
-  activeChat.messages.push({role:'user',text});
-  renderMessages();
-
-  input.value='';
-
-  setTimeout(()=>{
-    activeChat.messages.push({role:'ai',text:'AI: '+text});
-    renderMessages();
-  },500);
-}
-
-document.getElementById('send').onclick=send;
-document.getElementById('input').addEventListener('keypress',e=>{
-  if(e.key==='Enter') send();
 });
-document.getElementById('newChat').onclick=createChat;
-
-window.addEventListener('DOMContentLoaded',init);
 </script>
 
 </body>
