@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NixieGPT v2.3 - FIX</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        body { font-family: sans-serif; background: #f8fafc; }
+        #loader { position: fixed; inset: 0; background: white; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+    </style>
+</head>
+<body>
+
+    <div id="loader">🚀 Loading NixieGPT...</div>
+
+    <header class="p-4 border-b bg-white flex justify-between items-center sticky top-0 z-50">
+        <h1 class="text-2xl font-bold text-blue-600">NixieGPT</h1>
+        <button id="open-settings" class="bg-gray-100 p-2 px-4 rounded-lg font-bold text-sm">SET API KEY</button>
+    </header>
+
+    <main id="chat" class="p-4 max-w-2xl mx-auto space-y-4 pb-32"></main>
+
+    <div class="fixed bottom-0 w-full p-4 bg-white border-t">
+        <form id="f" class="max-w-2xl mx-auto flex gap-2">
+            <input type="text" id="i" placeholder="Ask something..." class="flex-1 p-3 bg-gray-100 rounded-xl outline-none border-2 border-transparent focus:border-blue-500">
+            <button type="submit" id="b" class="bg-blue-600 text-white px-6 rounded-xl font-bold">SEND</button>
+        </form>
+    </div>
+
+    <div id="m" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[1000] p-4">
+        <div class="bg-white p-6 rounded-2xl w-full max-w-xs text-center">
+            <h2 class="font-bold mb-4">Enter OpenRouter Key</h2>
+            <input type="password" id="k" class="w-full p-3 border rounded-xl mb-4" placeholder="sk-or-v1-...">
+            <button id="s" class="w-full py-3 bg-blue-600 text-white rounded-xl font-bold">SAVE & RELOAD</button>
+        </div>
+    </div>
+
+    <script>
+        // 1. HARD RESET LOGIC
+        let KEY = localStorage.getItem('nixie_key') || '';
+        
+        const chat = document.getElementById('chat');
+        const form = document.getElementById('f');
+        const input = document.getElementById('i');
+        const btn = document.getElementById('b');
+        const modal = document.getElementById('m');
+
+        function addMsg(role, text) {
+            const d = document.createElement('div');
+            d.className = `p-3 rounded-xl ${role==='u'?'bg-blue-600 text-white ml-auto':'bg-gray-200 text-black mr-auto'} max-w-[80%]`;
+            d.innerHTML = marked.parse(text);
+            chat.appendChild(d);
+            window.scrollTo(0, document.body.scrollHeight);
+            return d;
+        }
+
+        form.onsubmit = async (e) => {
+            e.preventDefault();
+            const val = input.value.trim();
+            if(!val || !KEY) return alert("Click 'SET API KEY' first!");
+
+            addMsg('u', val);
+            input.value = '';
+            btn.disabled = true;
+            const ai = addMsg('a', '...');
+
+            try {
+                // THE CRITICAL "AUTH" FIX
+                const cleanKey = KEY.replace(/\s/g, ''); // Removes ALL hidden spaces/newlines
+                
+                const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": "Bearer " + cleanKey, // Simple concat
+                        "HTTP-Referer": "https://github.com", // Generic referer
+                        "X-Title": "NixieGPT"
+                    },
+                    body: JSON.stringify({
+                        model: "google/gemini-2.0-flash-lite-preview-02-05:free",
+                        messages: [{role: "user", content: val}]
+                    })
+                });
+
+                const data = await response.json();
+                if(data.error) {
+                    ai.innerHTML = `<b class="text-red-600 underline">ERROR 401:</b> Your key is being rejected. <br><small>${data.error.message}</small>`;
+                } else {
+                    ai.innerHTML = marked.parse(data.choices[0].message.content);
+                }
+            } catch (err) {
+                ai.innerText = "Error: Check Console (F12)";
+            } finally {
+                btn.disabled = false;
+            }
+        };
+
+        document.getElementById('open-settings').onclick = () => modal.classList.replace('hidden', 'flex');
+        document.getElementById('s').onclick = () => {
+            const newKey = document.getElementById('k').value.trim();
+            localStorage.clear(); // NUKE OLD STORAGE
+            localStorage.setItem('nixie_key', newKey);
+            alert("Storage Cleared & New Key Saved!");
+            location.reload();
+        };
+
+        window.onload = () => document.getElementById('loader').remove();
+    </script>
+</body>
+</html>
+
