@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NixieGPT</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #0b1d3a;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+/* HEADER */
+header {
+    padding: 15px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    background: #020617;
+}
+
+/* NIXIEGPT STYLE */
+header span {
+    background: linear-gradient(90deg, #b91c1c, #1e3a8a);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+/* CHAT */
+#chat {
+    flex: 1;
+    padding: 15px;
+    overflow-y: auto;
+}
+
+.msg {
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 10px;
+    max-width: 80%;
+    word-wrap: break-word;
+}
+
+.user {
+    background: #b91c1c;
+    align-self: flex-end;
+}
+
+.bot {
+    background: #1e3a8a;
+}
+
+/* INPUT */
+#input-area {
+    display: flex;
+    padding: 10px;
+    background: #0f172a;
+}
+
+input {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 2px solid #b91c1c;
+    background: #020617;
+    color: white;
+    outline: none;
+}
+
+button {
+    margin-left: 10px;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: #b91c1c;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+button:disabled {
+    background: gray;
+    cursor: not-allowed;
+}
+
+/* KEY INPUT */
+#key-box {
+    padding: 10px;
+    background: #020617;
+    border-bottom: 2px solid #1e3a8a;
+}
+
+small {
+    display: block;
+    margin-bottom: 5px;
+}
+</style>
+
+</head>
+
+<body>
+
+<header>
+    <span>NixieGPT</span>
+</header>
+
+<div id="key-box">
+    <small>Enter OpenRouter API Key</small>
+    <input type="password" id="api-key" placeholder="Paste your key here">
+    <button onclick="saveKey()">Save</button>
+</div>
+
+<div id="chat"></div>
+
+<div id="input-area">
+    <input id="msg" placeholder="Ask something..." onkeydown="if(event.key==='Enter') sendMsg()">
+    <button onclick="sendMsg()">➤</button>
+</div>
+
+<script>
+let KEY = localStorage.getItem("nx_key") || "";
+
+/* LOAD KEY UI */
+if(KEY){
+    document.querySelector("header span").innerText = "NixieGPT 🔓";
+}
+
+/* CLEAN KEY */
+function cleanKey(k){
+    return k.replace(/[\s\u200B-\u200D\uFEFF]/g, "");
+}
+
+/* SAVE KEY */
+function saveKey(){
+    let raw = document.getElementById("api-key").value;
+    let cleaned = cleanKey(raw.trim());
+
+    if(!cleaned){
+        alert("❌ Key cannot be empty");
+        return;
+    }
+
+    KEY = cleaned;
+    localStorage.setItem("nx_key", KEY);
+
+    document.querySelector("header span").innerText = "NixieGPT 🔓";
+    alert("✅ Key saved!");
+}
+
+/* SEND MESSAGE */
+async function sendMsg(){
+    const input = document.getElementById("msg");
+    const text = input.value.trim();
+
+    if(!text) return;
+
+    if(!KEY){
+        alert("❌ No API key set");
+        return;
+    }
+
+    addMsg(text, "user");
+    input.value = "";
+
+    addMsg("Thinking...", "bot");
+
+    const btn = document.querySelector("#input-area button");
+    btn.disabled = true;
+
+    try {
+        const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Authorization": "Bearer " + KEY,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                model: "google/gemini-2.0-flash-lite-preview-02-05:free",
+                messages: [{ role: "user", content: text }]
+            })
+        });
+
+        let data = await res.json();
+
+        if(!res.ok){
+            throw new Error(data?.error?.message || "API Error");
+        }
+
+        let reply = data?.choices?.[0]?.message?.content;
+
+        if(!reply){
+            throw new Error("Empty response");
+        }
+
+        removeLastBot();
+        addMsg(reply, "bot");
+
+    } catch(err){
+        console.error(err);
+        removeLastBot();
+        addMsg("❌ " + err.message, "bot");
+    }
+
+    btn.disabled = false;
+}
+
+/* ADD MESSAGE */
+function addMsg(text, type){
+    const chat = document.getElementById("chat");
+    const div = document.createElement("div");
+
+    div.className = "msg " + type;
+    div.innerText = text;
+
+    chat.appendChild(div);
+    chat.scrollTop = chat.scrollHeight;
+}
+
+/* REMOVE LAST BOT */
+function removeLastBot(){
+    const chat = document.getElementById("chat");
+    const bots = chat.querySelectorAll(".bot");
+
+    if(bots.length > 0){
+        chat.removeChild(bots[bots.length - 1]);
+    }
+}
+</script>
+
+</body>
+</html>
