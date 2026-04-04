@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NixieGPT</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: #0b1220;
+      color: white;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    header {
+      padding: 15px;
+      background: #111827;
+      text-align: center;
+      font-size: 20px;
+      font-weight: bold;
+    }
+
+    .settings {
+      padding: 10px;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      background: #0f172a;
+      flex-wrap: wrap;
+    }
+
+    input {
+      padding: 10px;
+      border-radius: 6px;
+      border: none;
+      width: 220px;
+    }
+
+    button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 6px;
+      background: #2563eb;
+      color: white;
+      cursor: pointer;
+    }
+
+    #chat {
+      flex: 1;
+      padding: 15px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .msg {
+      padding: 10px 15px;
+      border-radius: 10px;
+      max-width: 70%;
+      word-wrap: break-word;
+    }
+
+    .user {
+      background: #2563eb;
+      align-self: flex-end;
+    }
+
+    .ai {
+      background: #1f2937;
+      align-self: flex-start;
+    }
+
+    .input-area {
+      display: flex;
+      padding: 10px;
+      background: #111827;
+    }
+
+    .input-area input {
+      flex: 1;
+    }
+
+    .loading {
+      font-style: italic;
+      opacity: 0.7;
+    }
+  </style>
+</head>
+<body>
+
+<header>NixieGPT</header>
+
+<div class="settings">
+  <input id="apiKey" placeholder="Enter API Key" />
+  <input id="model" placeholder="Model (e.g. qwen/qwen3.6-plus:free)" />
+</div>
+
+<div id="chat"></div>
+
+<div class="input-area">
+  <input id="message" placeholder="Ask something..." />
+  <button onclick="sendMessage()">Send</button>
+</div>
+
+<script>
+const chatBox = document.getElementById("chat");
+
+function addMessage(text, type) {
+  const div = document.createElement("div");
+  div.className = "msg " + type;
+  div.innerText = text;
+  chatBox.appendChild(div);
+  chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+async function sendMessage() {
+  const apiKey = document.getElementById("apiKey").value.trim();
+  const model = document.getElementById("model").value.trim();
+  const input = document.getElementById("message");
+
+  const message = input.value.trim();
+  if (!message) return;
+
+  if (!apiKey || !model) {
+    alert("Enter API Key and Model ID");
+    return;
+  }
+
+  addMessage(message, "user");
+
+  input.value = "";
+
+  const loadingMsg = document.createElement("div");
+  loadingMsg.className = "msg ai loading";
+  loadingMsg.innerText = "Thinking...";
+  chatBox.appendChild(loadingMsg);
+  chatBox.scrollTop = chatBox.scrollHeight;
+
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": "Bearer " + apiKey,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [
+          { role: "system", content: "You are a helpful AI assistant." },
+          { role: "user", content: message }
+        ]
+      })
+    });
+
+    const data = await res.json();
+
+    chatBox.removeChild(loadingMsg);
+
+    if (!res.ok) {
+      addMessage("Error: " + (data.error?.message || "Request failed"), "ai");
+      return;
+    }
+
+    const reply = data.choices?.[0]?.message?.content || "No response";
+    addMessage(reply, "ai");
+
+  } catch (err) {
+    chatBox.removeChild(loadingMsg);
+    addMessage("Error: " + err.message, "ai");
+  }
+}
+</script>
+
+</body>
+</html>
